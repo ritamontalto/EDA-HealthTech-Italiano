@@ -1,0 +1,200 @@
+
+- Inizio la mia analisi controllando il tasso di conservazione degli utenti, formulando le seguenti domande
+
+
+--- Q1: How many users left the program? - Quanti utenti hanno abbandonato il programma?
+
+SELECT 
+	clean_user_churn,
+	COUNT(*) AS users
+FROM clean_users
+WHERE clean_user_churn <> 'Unknown'
+GROUP BY clean_user_churn
+ORDER BY users DESC;
+
+
+
+--- Q2: How many users are in each engagement category and which activity groups have the highest churn rate? - Quanti utenti ci sono in ciascuna categoria di engagement e quali gruppi di attività hanno il tasso di abbandono più alto?
+
+SELECT 
+	clean_user_activity,
+	clean_user_churn,
+	COUNT(*) AS users
+FROM clean_users
+WHERE clean_user_activity <> 'Unknown' AND clean_user_churn <> 'Unknown'
+GROUP BY clean_user_activity, clean_user_churn
+ORDER BY clean_user_activity, clean_user_churn DESC;
+
+
+
+--- Q3: Which age segments are leaving the program the most? - Quali fasce d'età abbandonano maggiormente il programma?
+
+SELECT
+    c.age_range,
+    u.clean_user_churn,
+    COUNT(*) AS users
+FROM clean_users AS u
+JOIN clean_customers AS c
+    ON u.user_id = c.user_id
+WHERE clean_user_churn <> 'Unknown'
+GROUP BY c.age_range, u.clean_user_churn
+ORDER BY c.age_range, u.clean_user_churn DESC;
+
+
+
+--- Q4: Which diabetes population is hardest to retain? - Quale gruppo di persone con diabete è il più difficile da trattenere nello studio?
+
+SELECT
+	clean_diagnosis,
+	clean_user_churn,
+	COUNT(*) AS users
+FROM clean_users
+WHERE clean_diagnosis <> 'Unknown' AND clean_user_churn <> 'Unknown'
+GROUP BY clean_diagnosis, clean_user_churn
+ORDER BY clean_diagnosis, clean_user_churn DESC;
+
+
+
+
+- in seguito ho deciso di capire le motivazioni per cui gli utenti abbandonano il programma, attraverso le seguenti domande
+
+
+--- Q5: Are less engaged users more likely to leave the program? - Gli utenti meno coinvolti hanno una maggiore probabilità di abbandonare il programma?
+
+SELECT 
+clean_user_activity,
+COUNT(*) AS total_users,
+SUM(CASE
+        WHEN clean_user_churn = 'Yes' THEN 1
+        ELSE 0
+        END
+    ) AS churned_users,
+ROUND(SUM(CASE
+              WHEN clean_user_churn = 'Yes' THEN 1
+              ELSE 0
+              END
+          ) * 100.0 / COUNT(*), 2
+     ) AS churn_rate_percentage
+FROM clean_users
+WHERE clean_user_churn <> 'Unknown' AND clean_user_activity <> 'Unknown'
+GROUP BY clean_user_activity
+ORDER BY churn_rate_percentage DESC;
+
+
+
+--- Q6: Are retained users showing stronger long-term diabetes control? - Gli utenti mantenuti nel programma mostrano un migliore controllo del diabete a lungo termine?
+
+SELECT
+    clean_user_churn,
+    ROUND(CAST(AVG(initial_hba1c) AS NUMERIC), 2) AS avg_initial_hba1c,
+    ROUND(CAST(AVG(current_hba1c) AS NUMERIC), 2) AS avg_current_hba1c,
+    ROUND(CAST(AVG(initial_hba1c - current_hba1c) AS NUMERIC), 2) AS avg_hba1c_reduction
+FROM clean_users
+WHERE clean_user_churn <> 'Unknown'
+GROUP BY clean_user_churn
+ORDER BY clean_user_churn DESC;
+--- La funzione AVG restituiva un valore in double precision, quindi l'ho convertito a numeric prima dell’arrotondamento a due decimali.
+
+
+
+--- Q7: Are users who improve their glucose control more likely to remain enrolled? - Gli utenti che migliorano il controllo della glicemia hanno una maggiore probabilità di rimanere iscritti al programma?
+
+SELECT
+	clean_user_churn,
+	ROUND(CAST(AVG(initial_glycemia_rate) AS NUMERIC), 1) AS avg_initial_glycemia,
+	ROUND(CAST(AVG(final_glycemia_rate) AS NUMERIC), 1) AS avg_final_glycemia
+FROM clean_users
+WHERE clean_user_churn <> 'Unknown'
+GROUP BY clean_user_churn
+ORDER BY clean_user_churn DESC;
+
+
+
+
+
+- Ho anche deciso di analizzare l’efficacia del trattamento sugli utenti attraverso queste domande
+
+
+--- Q8: Which patient groups benefit most from the digital therapeutic program and experience the greatest improvement in long-term diabetes control? - Quali gruppi di pazienti traggono i maggiori benefici dal programma terapeutico digitale e mostrano il miglioramento più significativo nel controllo del diabete a lungo termine?
+
+SELECT
+	clean_diagnosis,
+	ROUND(CAST(AVG(initial_hba1c - current_hba1c) AS numeric), 2) AS avg_hba1c_reduction
+FROM clean_users
+WHERE clean_diagnosis <> 'Unknown'
+GROUP BY clean_diagnosis
+ORDER BY avg_hba1c_reduction DESC;
+
+
+
+--- Q9: Does higher engagement translate into better clinical outcomes? - Un maggiore coinvolgimento si traduce in migliori esiti clinici?
+
+SELECT
+	clean_user_activity,
+	ROUND(CAST(AVG(initial_hba1c) AS numeric), 2) AS avg_initial_hba1c,
+	ROUND(CAST(AVG(current_hba1c) AS numeric), 2) AS avg_current_hba1c
+FROM clean_users
+WHERE clean_user_activity <> 'Unknown'
+GROUP BY clean_user_activity
+ORDER BY avg_initial_hba1c DESC;
+
+
+
+
+
+- Infine, ho deciso di ricavare alcuni insight utili per il business
+
+
+--- Q10: Which enrollment channels bring the most users into the program? - Quali canali di iscrizione portano il maggior numero di utenti al programma?
+
+SELECT
+	clean_enrollment_channel,
+	COUNT(*) AS users
+FROM clean_users
+WHERE clean_enrollment_channel <> 'Unknown'
+GROUP BY clean_enrollment_channel
+ORDER BY users DESC;
+
+
+
+--- Q11: Are some acquisition channels attracting users with higher churn risk? - Ci sono dei canali di acquisizione che attraggono utenti con un rischio di abbandono più elevato?
+
+SELECT
+	clean_enrollment_channel,
+	clean_user_churn,
+	COUNT(*) AS users,
+	ROUND(COUNT(*) * 100.0 / SUM(COUNT(*)) OVER(PARTITION BY clean_enrollment_channel), 2) AS percentage
+FROM clean_users
+WHERE clean_enrollment_channel <> 'Unknown' AND clean_user_churn <> 'Unknown'
+GROUP BY clean_enrollment_channel, clean_user_churn
+ORDER BY clean_enrollment_channel, clean_user_churn DESC;
+
+
+
+--- Q12: Which treatment plans achieve better retention? - Quali piani di trattamento ottengono una migliore conservazione di utenti?
+
+SELECT
+    clean_treatment_plan,
+    clean_user_churn,
+    COUNT(*) AS users
+FROM clean_users
+WHERE clean_treatment_plan <> 'Unknown' AND clean_user_churn <> 'Unknown'
+GROUP BY clean_treatment_plan, clean_user_churn
+ORDER BY clean_treatment_plan, clean_user_churn DESC;
+
+
+
+--- Q13: How long do users stay in the program on average before leaving? - Per quanto tempo, in media, gli utenti rimangono nel programma prima di abbandonarlo?
+
+SELECT
+	clean_user_churn,
+	ROUND(CAST(AVG(months_in_program) AS NUMERIC), 1) AS avg_months
+FROM clean_users
+WHERE clean_user_churn <> 'Unknown'
+GROUP BY clean_user_churn
+ORDER BY clean_user_churn DESC;
+
+
+
+- Ho deciso di rimuovere tutti i valori null o sconosciuti da ogni query perché, in caso contrario, rischierei di includere categorie non utili o che non rappresentano lo stato reale, soprattutto in alcune query specifiche. Detto questo, i valori nulli possono comunque rappresentare un’informazione importante, infatti li includerò nella visualizzazione dei dati.
+

@@ -1,0 +1,394 @@
+--- Inizio controllando I dataset interi per avere una visione complessiva di ciò che contengono, a partire da users
+ 
+SELECT *
+FROM users;
+
+--- procedo controllando se ci sono duplicati 
+
+SELECT user_id,
+COUNT(*) as num_user
+FROM users
+GROUP BY user_id 
+HAVING COUNT(*) > 1;
+
+
+ --- trovo 3 duplicati, quindi procedo a rimuoverli dal dataset
+
+WITH ranked_user AS (
+SELECT *,
+ROW_NUMBER() OVER (PARTITION BY user_id ORDER BY user_id) AS rn
+FROM users
+)
+SELECT *
+FROM ranked_user
+WHERE rn = 1;
+
+
+--- adesso inizio a pulire i dati che ho trovato, partendo dalla colonna diagnosis
+
+SELECT diagnosis,
+CASE
+    WHEN diagnosis IN ('TYPE 2','type 2','T2D','Type II') THEN 'Type 2'
+	WHEN diagnosis IN ('TYPE 1','type 1','T1D','Type I') THEN 'Type 1'
+	WHEN diagnosis = '' OR diagnosis = 'N/A' OR diagnosis IS NULL THEN 'Unknown'
+ELSE diagnosis
+END AS clean_diagnosis
+FROM users;
+
+
+--- controllo se ci sono valori nulli nella colonna user activity 
+
+SELECT COUNT (*) user_activity
+FROM users 
+WHERE user_activity = '' OR user_activity IS NULL OR user_activity = 'N/A';
+
+
+--- e li rendo più standard
+
+SELECT user_activity,
+CASE 
+	WHEN user_activity = '' OR user_activity IS NULL OR user_activity = 'N/A' THEN 'Unknown'
+ELSE user_activity
+END AS clean_user_activity
+FROM users;
+
+
+--- pulisco la colonna user churn rendendo i dati più standard
+
+SELECT user_churn,
+CASE
+    WHEN user_churn IN ('YES','yes','Y') THEN 'Yes'
+	WHEN user_churn IN ('NO','no','N') THEN 'No'
+	WHEN user_churn = '' OR user_churn IS NULL THEN 'Unknown'
+ELSE user_churn
+END AS clean_user_churn
+FROM users;
+
+
+--- adesso pulisco i valori nella colonna device type per lo stesso motivo di cui sopra
+
+SELECT device_type,
+CASE
+    WHEN device_type IN ('IOS', 'ios', 'i-phone', 'iphone') THEN 'iOS'
+	WHEN device_type IN ('ANDROID', 'android') THEN 'Android'
+	WHEN device_type = '' OR device_type IS NULL THEN 'Unknown'
+ELSE device_type
+END AS clean_device_type
+FROM users;
+
+
+--- controllo la presenza di valori nulli nella colonna insurance type 
+
+SELECT COUNT (*) insurance_type
+FROM users 
+WHERE insurance_type = '' OR insurance_type IS NULL OR insurance_type = 'N/A';
+
+
+--- e rendo standard anche questi dati
+
+SELECT insurance_type,
+CASE 
+	WHEN insurance_type = '' OR insurance_type IS NULL OR insurance_type = 'N/A' THEN 'Unknown'
+ELSE insurance_type
+END AS clean_insurance_type
+FROM users;
+
+--- faccio lo stesso per la colonna treatment plan, partendo sempre dalla verifica di valori duplicati
+
+SELECT COUNT (*) treatment_plan
+FROM users 
+WHERE treatment_plan = '' OR treatment_plan IS NULL OR treatment_plan = 'N/A';
+
+
+--- e li rendo più standard
+
+SELECT treatment_plan,
+CASE 
+	WHEN treatment_plan = '' OR treatment_plan IS NULL OR treatment_plan = 'N/A' THEN 'Unknown'
+ELSE treatment_plan
+END AS clean_treatment_plan
+FROM users;
+
+
+--- procedo col controllo della colonna enrollment channel 
+
+SELECT COUNT (*) enrollment_channel
+FROM users 
+WHERE enrollment_channel = '' OR enrollment_channel IS NULL OR enrollment_channel = 'N/A';
+
+
+--- e rendo i dati più standard anche qui
+
+SELECT enrollment_channel,
+CASE 
+	WHEN enrollment_channel = '' OR enrollment_channel IS NULL OR enrollment_channel = 'N/A' THEN 'Unknown'
+ELSE enrollment_channel
+END AS clean_enrollment_channel
+FROM users;
+
+
+--- Infine procedo con la verifica dei duplicati nella colonna income segment 
+
+SELECT COUNT (*) income_segment
+FROM users 
+WHERE income_segment = '' OR income_segment IS NULL OR income_segment = 'N/A';
+
+
+--- e anche in questo caso li rendo più standard 
+
+SELECT income_segment,
+CASE 
+	WHEN income_segment = '' OR income_segment IS NULL OR income_segment = 'N/A' THEN 'Unknown'
+ELSE income_segment
+END AS clean_income_segment
+FROM users;
+
+
+--- Adesso passo all'intero dataset customers, per avere una visione complessiva di ciò che contiene
+
+SELECT *
+FROM customers; 
+
+--- verifico la presenza di valori duplicati anche in questo dataset
+
+SELECT customer_id,
+COUNT(*) as num_cust
+FROM customers
+GROUP BY customer_id 
+HAVING COUNT(*) > 1;
+
+
+--- come previsto, anche in questo dataset ci sono 3 duplicati, procedo con la rimozione
+
+WITH ranked_cust AS (
+SELECT *,
+ROW_NUMBER() OVER (PARTITION BY customer_id ORDER BY customer_id) AS rn
+FROM customers
+)
+SELECT *
+FROM ranked_cust
+WHERE rn = 1;
+
+
+--- adesso inizio il processo di pulizia dei dati, partendo dalla colonna name 
+
+SELECT name,
+INITCAP(name) AS clean_name
+FROM customers;
+
+
+--- controllo la presenza di eventuali indirizzi mail invalidi nella colonna email 
+
+SELECT email 
+FROM customers 
+WHERE email NOT LIKE '%@%';
+
+
+--- e li sostituisco con un valore nullo
+
+SELECT email, 
+CASE 
+	WHEN email NOT LIKE '%@%' THEN NULL
+ELSE email
+END AS clean_email
+FROM customers;
+
+
+--- pulisco la colonna phone_number poichè il formato non è uniforme, utilizzo una CTE per rimuovere i valori non numerici, rimuovo il numero 1 iniziale nel caso in cui ci sono 11 cifre, definisco i valori nulli qualora presenti e rendo il formato del numero di telefono standard 
+
+WITH phones AS (
+select phone_number,
+REGEXP_REPLACE(phone_number, '[^0-9]', '', 'g') AS digits
+FROM customers
+)
+SELECT phone_number,
+CASE
+	WHEN LENGTH(digits) = 11 AND LEFT(digits,1) = '1'
+    THEN
+    CONCAT(SUBSTRING(RIGHT(digits,10),1,3), '-',
+           SUBSTRING(RIGHT(digits,10),4,3), '-',
+           SUBSTRING(RIGHT(digits,10),7,4)
+          )
+    WHEN LENGTH(digits) NOT IN (10,11) THEN NULL
+ELSE
+CONCAT(SUBSTRING(digits,1,3), '-',
+       SUBSTRING(digits,4,3), '-',
+       SUBSTRING(digits,7,4)
+       )
+END AS clean_phone_number
+FROM phones;
+
+
+--- definisco anche il formato della colonna city  
+
+SELECT city,
+INITCAP(city) AS clean_city
+FROM customers;
+
+
+--- controllo il formato dei dati nella colonna state
+
+SELECT state 
+FROM customers;
+
+
+--- e pulisco anche questi rendendoli più uniformi
+
+SELECT state,
+CASE
+	WHEN state IN ('Texas', 'tx') THEN 'TX'
+	WHEN state IN ('ca', 'Calif.') THEN 'CA'
+	WHEN state = 'nv' THEN 'NV'
+	WHEN state = 'nc' THEN 'NC'
+	WHEN state = 'co' THEN 'CO'
+	WHEN state = 'ma' THEN 'MA'
+	WHEN state = 'ny' THEN 'NY'
+	WHEN state = 'oh' THEN 'OH'
+	WHEN state = 'pa' THEN 'PA'
+	WHEN state = 'tn' THEN 'TN'
+	WHEN state = 'wa' THEN 'WA'
+ELSE state
+END AS clean_state
+FROM customers;
+
+
+--- Adesso procedo con la creazione di nuovi dataset contenenti i dati puliti, in modo da poterli scaricare ed utilizzare per la mia analisi. Inizio dal dataset users 
+
+CREATE TABLE clean_users AS
+WITH ranked_user AS (
+SELECT *,
+ROW_NUMBER() OVER (PARTITION BY user_id ORDER BY user_id) AS rn
+FROM users
+)
+SELECT user_id,
+CASE
+    WHEN diagnosis IN ('TYPE 2','type 2','T2D','Type II') THEN 'Type 2'
+	WHEN diagnosis IN ('TYPE 1','type 1','T1D','Type I') THEN 'Type 1'
+	WHEN diagnosis = '' OR diagnosis = 'N/A' OR diagnosis IS NULL THEN 'Unknown'
+ELSE diagnosis
+END AS clean_diagnosis,
+avg_glycemia_rate,
+initial_glycemia_rate,
+final_glycemia_rate,
+CASE 
+	WHEN user_activity = '' OR user_activity IS NULL OR user_activity = 'N/A' THEN 'Unknown'
+ELSE user_activity
+END AS clean_user_activity,
+activity_days_per_month,
+CASE
+    WHEN user_churn IN ('YES','yes','Y') THEN 'Yes'
+	WHEN user_churn IN ('NO','no','N') THEN 'No'
+	WHEN user_churn = '' OR user_churn IS NULL THEN 'Unknown'
+ELSE user_churn
+END AS clean_user_churn,
+churn_reason,
+CASE
+    WHEN device_type IN ('IOS', 'ios', 'i-phone', 'iphone') THEN 'iOS'
+	WHEN device_type IN ('ANDROID', 'android') THEN 'Android'
+	WHEN device_type = '' OR device_type IS NULL THEN 'Unknown'
+ELSE device_type
+END AS clean_device_type,
+months_in_program,
+CASE 
+	WHEN insurance_type = '' OR insurance_type IS NULL OR insurance_type = 'N/A' THEN 'Unknown'
+ELSE insurance_type
+END AS clean_insurance_type,
+CASE 
+	WHEN treatment_plan = '' OR treatment_plan IS NULL OR treatment_plan = 'N/A' THEN 'Unknown'
+ELSE treatment_plan
+END AS clean_treatment_plan,
+initial_hba1c,
+current_hba1c,
+CASE 
+	WHEN enrollment_channel = '' OR enrollment_channel IS NULL OR enrollment_channel = 'N/A' THEN 'Unknown'
+ELSE enrollment_channel
+END AS clean_enrollment_channel,
+CASE 
+	WHEN income_segment = '' OR income_segment IS NULL OR income_segment = 'N/A' THEN 'Unknown'
+ELSE income_segment
+END AS clean_income_segment
+FROM ranked_user
+WHERE rn = 1;
+
+
+--- mentre qui creo il nuovo dataset customers pulito 
+
+CREATE TABLE clean_customers AS
+WITH ranked_cust AS (
+SELECT *,
+ROW_NUMBER() OVER (PARTITION BY customer_id ORDER BY customer_id) AS rn
+FROM customers
+),
+phones_cte AS (
+SELECT *,
+REGEXP_REPLACE(phone_number,'[^0-9]','','g') AS digits
+FROM ranked_cust
+)
+SELECT customer_id,
+user_id,
+INITCAP(name) AS clean_name,
+age,
+gender,
+CASE 
+	WHEN email NOT LIKE '%@%' THEN NULL
+ELSE LOWER(email)
+END AS clean_email,
+CASE
+	WHEN LENGTH(digits) = 11
+	AND LEFT(digits,1) = '1'
+	THEN CONCAT(SUBSTRING(RIGHT(digits,10),1,3), '-',
+                SUBSTRING(RIGHT(digits,10),4,3), '-',
+                SUBSTRING(RIGHT(digits,10),7,4)
+               )
+	WHEN LENGTH(digits) NOT IN (10,11)
+    THEN NULL
+ELSE CONCAT(SUBSTRING(digits,1,3), '-',
+            SUBSTRING(digits,4,3), '-',
+            SUBSTRING(digits,7,4)
+            )
+END AS clean_phone_number,
+INITCAP(city) AS clean_city,
+CASE
+	WHEN state IN ('Texas', 'tx') THEN 'TX'
+	WHEN state IN ('ca', 'Calif.') THEN 'CA'
+	WHEN state = 'nv' THEN 'NV'
+	WHEN state = 'nc' THEN 'NC'
+	WHEN state = 'co' THEN 'CO'
+	WHEN state = 'ma' THEN 'MA'
+	WHEN state = 'ny' THEN 'NY'
+	WHEN state = 'oh' THEN 'OH'
+	WHEN state = 'pa' THEN 'PA'
+	WHEN state = 'tn' THEN 'TN'
+	WHEN state = 'wa' THEN 'WA'
+ELSE state
+END AS clean_state,
+signup_date,
+preferred_contact_method
+FROM phones_cte
+WHERE rn = 1;
+
+
+--- Infine verifico i risultati controllando la quantità di righi che ho ottenuto in entrambi i nuovi dataset. Avendo rimosso 3 duplicati all'inizio e avendo 1000 righi ciascuno, entrambi i dataset adesso devono avere 997 righi ciascuno
+
+--- Qui controllo il dataset users
+
+SELECT 
+COUNT(*) 
+FROM users;
+
+SELECT 
+COUNT(*) 
+FROM clean_users;
+
+
+--- Qui il dataset customers
+
+SELECT 
+COUNT(*) 
+FROM customers;
+
+SELECT 
+COUNT(*) 
+FROM clean_customers;
+
+--- adesso sono pronta per iniziare l'analisi dei dati
